@@ -99,30 +99,36 @@ it takes an abstract value and returns a set of APInts that are in the concretiz
 std::vector<APInt> concretize_known_bits(KnownBits kbs)
 {
     std::vector<APInt> apints;
-    // Zeroes: 001
-    // Ones: 000
-    // possible_ints = 2^(bw - total # set )
     int width = kbs.getBitWidth();
     int possible_ints = 1;
-    for(int bit = 0; bit < width; bit++) {
-        if (kbs.One.extractBits(1, bit) == 0 && kbs.Zero.extractBits(1, bit) == 0) {
+    for (int bit = 0; bit < width; bit++)
+    {
+        if (kbs.One.extractBits(1, bit) == 0 && kbs.Zero.extractBits(1, bit) == 0)
+        {
             possible_ints *= 2; // both 0 is top, which would multiply possibly ints by 2
         }
     }
 
     // we're basically counting up in binary only using the bits that are T
-    for(int c = 0; c < possible_ints; c++) {
+    for (int c = 0; c < possible_ints; c++)
+    {
         int value = 0;
         int pow = 1;
         int div = c;
         int rem;
 
-        for (int b = 0; b < width; b++) {
-            if (kbs.Zero.extractBits(1, b) == 1) {
+        for (int b = 0; b < width; b++)
+        {
+            if (kbs.Zero.extractBits(1, b) == 1)
+            {
                 // skip basically.
-            } else if(kbs.One.extractBits(1, b) == 1) {
+            }
+            else if (kbs.One.extractBits(1, b) == 1)
+            {
                 value += pow;
-            } else { // both == 0
+            }
+            else
+            { // both == 0
                 // use c to calculate
                 rem = div % 2;
                 if (rem == 1)
@@ -136,11 +142,15 @@ std::vector<APInt> concretize_known_bits(KnownBits kbs)
     return apints;
 }
 
+unsigned int concrete_op(APInt val) {
+    return val.countLeadingOnes();
+}
+
 /*
 write an abstraction function for your abstract domain.
 it takes a set of APInts and returns the best abstract value whose concretization set includes the given set.
 */
-KnownBits abstract_known_bits(std::vector<APInt> values)
+KnownBits abstract_known_bits(std::vector<unsigned int> values)
 {
     // two APInts and then all 1's bottom up transfer node lattice using 'and' for each
 }
@@ -155,13 +165,18 @@ of course, we expect this last number to be zero, but you never know.
 */
 int main()
 {
-    // int bitwidth = 100000000;
-    // auto kbs = enumerate_values(bitwidth);
-    // for blah in kbs
-    // auto cvs = concretize_known_bits(blah);
+    int bitwidth = 4;
+    std::vector<KnownBits> kbs = enumerate_values(bitwidth);
+    std::vector<APInt> cbs;
+    for (KnownBits kb : kbs)
+    {
+        std::vector<APInt> c = concretize_known_bits(kb);
+        cbs.insert(cbs.end(), c.begin(), c.end());
+    }
 
+    std::vector<unsigned int> results;
     // for each combo in cvs:
-    //     do_concrete_op(combo.first, combo.second);
+        // results.push_back(concrete_op(combo.first, combo.second));
     // abstract_known_bits(...) // after concrete_op
     //
     // auto vals = enumerate_values(2);
@@ -171,15 +186,13 @@ int main()
     //     std::cout << std::endl;
     // }
 
-    KnownBits kbs(4);
-    // kbs.Zero.clearAllBits();
-    // kbs.One.setAllBits();
-    kbs.Zero.setBit(0);
-    // kbs.One.clearBit(1);
-    print_known_bits(kbs);
+    KnownBits kb(4);
+    kb.Zero.setBit(0);
+    print_known_bits(kb);
 
-    auto pos_nums = concretize_known_bits(kbs);
-    for (APInt num : pos_nums) {
+    auto pos_nums = concretize_known_bits(kb);
+    for (APInt num : pos_nums)
+    {
         std::cout << num.getLimitedValue() << std::endl;
     }
 }
