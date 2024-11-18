@@ -6,6 +6,8 @@
 #include <stack>
 
 using namespace llvm;
+using std::cout;
+using std::endl;
 
 void print_known_bits(KnownBits kbs)
 {
@@ -137,22 +139,58 @@ std::vector<APInt> concretize_known_bits(KnownBits kbs)
             }
             pow *= 2;
         }
-        apints.push_back(APInt(width, value));
+        APInt apint(width, value);
+        apints.push_back(apint);
     }
     return apints;
 }
 
-unsigned int concrete_op(APInt val) {
-    return val.countLeadingOnes();
+APInt concrete_op(APInt val1, APInt val2) {
+    uint64_t shiftAmount = val2.getZExtValue();    
+    if (shiftAmount >= val1.getBitWidth()) {
+        shiftAmount = 0;
+    }
+
+    return val1.shl(shiftAmount);
 }
 
 /*
 write an abstraction function for your abstract domain.
 it takes a set of APInts and returns the best abstract value whose concretization set includes the given set.
 */
-KnownBits abstract_known_bits(std::vector<unsigned int> values)
+KnownBits abstract_known_bits(std::vector<APInt> values)
 {
     // two APInts and then all 1's bottom up transfer node lattice using 'and' for each
+    APInt One(values[0].getBitWidth(), 0);
+    APInt Zero(values[0].getBitWidth(), 0);
+    One.setAllBits();
+    Zero.setAllBits();
+
+    for (APInt value : values) {
+        One = One & value;
+        value = ~value;
+        Zero = Zero & value;
+    }
+    KnownBits res;
+    res.One = One;
+    res.Zero = Zero;
+    return res;
+}
+
+KnownBits combine_known_bits(std::vector<KnownBits> kbs) {
+    APInt One(kbs[0].getBitWidth(), 0);
+    APInt Zero(kbs[0].getBitWidth(), 0);
+    One.setAllBits();
+    Zero.setAllBits();
+
+    for (KnownBits value : kbs) {
+        One = One & value.One;
+        Zero = Zero & value.Zero;
+    }
+    KnownBits res;
+    res.One = One;
+    res.Zero = Zero;
+    return res;
 }
 
 /*
@@ -165,34 +203,48 @@ of course, we expect this last number to be zero, but you never know.
 */
 int main()
 {
-    int bitwidth = 4;
-    std::vector<KnownBits> kbs = enumerate_values(bitwidth);
-    std::vector<APInt> cbs;
-    for (KnownBits kb : kbs)
-    {
+    int bitwidth = 6;
+    std::vector<KnownBits> kbs = enumerate_values(bitwidth); // all known bit variations of this bitwidth
+    std::vector<APInt> cbs; // hold all concretized bits
+
+    for (KnownBits kb : kbs) { // concretize
         std::vector<APInt> c = concretize_known_bits(kb);
         cbs.insert(cbs.end(), c.begin(), c.end());
     }
 
-    std::vector<unsigned int> results;
-    // for each combo in cvs:
-        // results.push_back(concrete_op(combo.first, combo.second));
-    // abstract_known_bits(...) // after concrete_op
-    //
-    // auto vals = enumerate_values(2);
-    // for (auto val : vals)
-    // {
-    //     print_known_bits(val);
-    //     std::cout << std::endl;
-    // }
-
-    KnownBits kb(4);
-    kb.Zero.setBit(0);
-    print_known_bits(kb);
-
-    auto pos_nums = concretize_known_bits(kb);
-    for (APInt num : pos_nums)
-    {
-        std::cout << num.getLimitedValue() << std::endl;
+    std::vector<APInt> my_results;
+    for (int i = 0; i < cbs.size(); i++) {
+        for (int j = 0; j < cbs.size(); j++) {
+            my_results.push_back(concrete_op(cbs[i], cbs[j]));
+        }
     }
+
+    std::vector<KnownBits> llvm_results;
+    for (int i = 0; i < kbs.size(); i++) {
+        for (int j = 0; j < kbs.size(); j++) {
+            KnownBits res = KnownBits::shl(kbs[i], kbs[j]); // segfault here
+            llvm_results.push_back(res);
+        }
+    }
+    
+    // ----- tests -----
+    // std::vector<APInt> tests;
+    // APInt f(4, 4);
+    // APInt s(4, 1);
+    // f = concrete_op(f, s);
+    // tests.push_back(f);
+    // tests.push_back(s);
+    // KnownBits test_kbs = abstract_known_bits(tests);
+    // print_known_bits(test_kbs);
+    // ----- tests -----
+
+    KnownBits my_known_bits = abstract_known_bits(my_results); // after concrete_op
+    KnownBits llvm_known_bits = combine_known_bits(llvm_results);
+
+    cout << "My Known Bits:" << endl;
+    print_known_bits(my_known_bits);
+    cout << endl;
+
+    cout << "llvm known bits" << endl;
+    print_known_bits(llvm_known_bits);
 }
