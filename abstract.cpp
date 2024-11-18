@@ -145,12 +145,13 @@ std::vector<APInt> concretize_known_bits(KnownBits kbs)
     return apints;
 }
 
-APInt concrete_op(APInt val1, APInt val2) {
-    uint64_t shiftAmount = val2.getZExtValue();    
-    if (shiftAmount >= val1.getBitWidth()) {
-        shiftAmount = 0;
+APInt concrete_op(APInt val1, APInt val2)
+{
+    uint64_t shiftAmount = val2.getZExtValue();
+    if (shiftAmount >= val1.getBitWidth())
+    {
+        return APInt(val1.getBitWidth(), 0);
     }
-
     return val1.shl(shiftAmount);
 }
 
@@ -166,10 +167,11 @@ KnownBits abstract_known_bits(std::vector<APInt> values)
     One.setAllBits();
     Zero.setAllBits();
 
-    for (APInt value : values) {
+    for (APInt value : values)
+    {
         One = One & value;
-        value = ~value;
-        Zero = Zero & value;
+        APInt notValue = ~value;
+        Zero = Zero & notValue;
     }
     KnownBits res;
     res.One = One;
@@ -177,13 +179,15 @@ KnownBits abstract_known_bits(std::vector<APInt> values)
     return res;
 }
 
-KnownBits combine_known_bits(std::vector<KnownBits> kbs) {
+KnownBits combine_known_bits(std::vector<KnownBits> kbs)
+{
     APInt One(kbs[0].getBitWidth(), 0);
     APInt Zero(kbs[0].getBitWidth(), 0);
     One.setAllBits();
     Zero.setAllBits();
 
-    for (KnownBits value : kbs) {
+    for (KnownBits value : kbs)
+    {
         One = One & value.One;
         Zero = Zero & value.Zero;
     }
@@ -191,6 +195,37 @@ KnownBits combine_known_bits(std::vector<KnownBits> kbs) {
     res.One = One;
     res.Zero = Zero;
     return res;
+}
+
+bool more_precise(KnownBits k1, KnownBits k2)
+{
+    return ((k1.One & k2.One) != k1.One) && ((k1.Zero & k2.Zero) != k1.Zero);
+}
+
+unsigned int count_llvm_more_precise(std::vector<KnownBits> llvm_results, std::vector<KnownBits> my_results)
+{
+    unsigned int llvm_more_precise = 0;
+    for (int i = 0; i < llvm_results.size(); i++)
+    {
+        if (more_precise(llvm_results[i], my_results[i]))
+        {
+            llvm_more_precise++;
+        }
+    }
+    return llvm_more_precise;
+}
+
+unsigned int count_composite_more_precise(std::vector<KnownBits> llvm_results, std::vector<KnownBits> my_results)
+{
+    unsigned int composite_more_precise = 0;
+    for (int i = 0; i < my_results.size(); i++)
+    {
+        if (more_precise(my_results[i], llvm_results[i]))
+        {
+            composite_more_precise++;
+        }
+    }
+    return composite_more_precise;
 }
 
 /*
@@ -203,48 +238,57 @@ of course, we expect this last number to be zero, but you never know.
 */
 int main()
 {
-    int bitwidth = 6;
+    int bitwidth = 4;
     std::vector<KnownBits> kbs = enumerate_values(bitwidth); // all known bit variations of this bitwidth
-    std::vector<APInt> cbs; // hold all concretized bits
-
-    for (KnownBits kb : kbs) { // concretize
-        std::vector<APInt> c = concretize_known_bits(kb);
-        cbs.insert(cbs.end(), c.begin(), c.end());
-    }
-
-    std::vector<APInt> my_results;
-    for (int i = 0; i < cbs.size(); i++) {
-        for (int j = 0; j < cbs.size(); j++) {
-            my_results.push_back(concrete_op(cbs[i], cbs[j]));
-        }
-    }
+    cout << "Number of abstract values: " << kbs.size() << endl;
 
     std::vector<KnownBits> llvm_results;
-    for (int i = 0; i < kbs.size(); i++) {
-        for (int j = 0; j < kbs.size(); j++) {
-            KnownBits res = KnownBits::shl(kbs[i], kbs[j]); // segfault here
-            llvm_results.push_back(res);
+    std::vector<KnownBits> my_results;
+
+    for (int i = 0; i < kbs.size(); i++)
+    {
+        for (int j = 0; j < kbs.size(); j++)
+        {
+            KnownBits kb1 = kbs[i];
+            KnownBits kb2 = kbs[j];
+
+            // do for llvm version
+            KnownBits llvm_res = KnownBits::shl(kb1, kb2);
+            llvm_results.push_back(llvm_res);
+
+            // naive version
+            std::vector<APInt> c = concretize_known_bits(kb1);
+            std::vector<APInt> c2 = concretize_known_bits(kb2);
+            c.insert(c.end(), c2.begin(), c2.end());
+
+            std::vector<APInt> c_res;
+            for (int i = 0; i < c.size(); i++)
+            {
+                for (int j = 0; j < c.size(); j++)
+                {
+                    c_res.push_back(concrete_op(c[i], c[j]));
+                }
+            }
+            my_results.push_back(abstract_known_bits(c_res));
         }
     }
-    
-    // ----- tests -----
-    // std::vector<APInt> tests;
-    // APInt f(4, 4);
-    // APInt s(4, 1);
-    // f = concrete_op(f, s);
-    // tests.push_back(f);
-    // tests.push_back(s);
-    // KnownBits test_kbs = abstract_known_bits(tests);
-    // print_known_bits(test_kbs);
-    // ----- tests -----
 
-    KnownBits my_known_bits = abstract_known_bits(my_results); // after concrete_op
-    KnownBits llvm_known_bits = combine_known_bits(llvm_results);
+    // cout << "My Known Bits:" << endl;
+    assert(my_results.size() == llvm_results.size());
 
-    cout << "My Known Bits:" << endl;
-    print_known_bits(my_known_bits);
-    cout << endl;
+    cout << "Number of times the composite transfer function is more precise:";
+    cout << count_composite_more_precise(llvm_results, my_results) << endl;
 
-    cout << "llvm known bits" << endl;
-    print_known_bits(llvm_known_bits);
+    cout << "Number of times the llvm transfer function is more precise:";
+    cout << count_llvm_more_precise(llvm_results, my_results) << endl;
+    // for (auto kbs : my_results)
+    // {
+    //     print_known_bits(kbs);
+    // }
+    // cout << endl;
+
+    // cout << "llvm known bits" << endl;
+    // for (auto kbs : llvm_results) {
+    //     print_known_bits(kbs);
+    // }
 }
