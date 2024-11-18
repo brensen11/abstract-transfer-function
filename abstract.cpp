@@ -281,14 +281,14 @@ int main()
 
     cout << "Number of times the llvm transfer function is more precise:";
     cout << count_llvm_more_precise(llvm_results, my_results) << endl;
-    // for (auto kbs : my_results)
-    // {
-    //     print_known_bits(kbs);
-    // }
-    // cout << endl;
+    for (auto kbs : my_results)
+    {
+        print_known_bits(kbs);
+    }
+    cout << endl;
 
-    // cout << "llvm known bits" << endl;
-    // for (auto kbs : llvm_results) {
-    //     print_known_bits(kbs);
-    // }
+    cout << "llvm known bits" << endl;
+    for (auto kbs : llvm_results) {
+        print_known_bits(kbs);
+    }
 }
